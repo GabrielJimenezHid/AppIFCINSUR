@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <PluginOutDir>$(MSBuildThisFileDirectory)..\..\plugins-out\$(MSBuildProjectName)\</PluginOutDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Insur.Plugins.Abstractions\Insur.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <PackageReference Include="Xbim.Essentials" Version="6.1.605" />
+  </ItemGroup>
+
+  <Target Name="CopyToPluginsOut" AfterTargets="Build">
+    <ItemGroup>
+      <PluginFiles Include="$(OutDir)**\*.*" Exclude="$(OutDir)Insur.Plugins.Abstractions.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PluginFiles)" DestinationFiles="@(PluginFiles->'$(PluginOutDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

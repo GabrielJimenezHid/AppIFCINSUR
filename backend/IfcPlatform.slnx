@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/plugins/">
+    <Project Path="plugins/Insur.GestorMediciones/Insur.GestorMediciones.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Insur.Host/Insur.Host.csproj" />
+    <Project Path="src/Insur.Plugins.Abstractions/Insur.Plugins.Abstractions.csproj" />
+  </Folder>
+</Solution>

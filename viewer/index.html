@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IFC Viewer</title>
+  </head>
+  <body>
+    <div id="toolbar">
+      <label class="btn">
+        Abrir IFC
+        <input id="file" type="file" accept=".ifc" hidden />
+      </label>
+      <button id="plugins-toggle" class="btn">Plugins</button>
+      <span id="status">Selecciona un archivo IFC</span>
+    </div>
+    <section id="plugins-panel">
+      <select id="plugin-select"></select>
+      <div id="plugin-form"></div>
+      <span id="plugin-status"></span>
+    </section>
+    <section id="results-window">
+      <div id="results-header">
+        <strong id="results-title"></strong>
+        <span id="results-summary"></span>
+        <span class="spacer"></span>
+        <button id="btn-view" title="Colorea las partidas marcadas y atenúa el resto">Crear vista 3D</button>
+        <button id="btn-materials" title="Colorea cada material IDS-M- con un color distinto">Colores por material</button>
+        <button id="btn-reset">Restablecer</button>
+        <button id="results-close">✕</button>
+      </div>
+      <div id="results-body"></div>
+    </section>
+    <div id="container"></div>
+    <aside id="props">Haz clic en un elemento para ver sus propiedades</aside>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
