@@ -63,7 +63,7 @@ let selected: { model: FragmentsModel; localId: number } | null = null;
 let currentFile: File | null = null;
 
 initPlugins({ getFile: () => currentFile, components, fragments });
-initSections({ world, fragments });
+initSections({ world, fragments, container });
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];

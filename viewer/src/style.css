@@ -1,4 +1,4 @@
-html, body {
+﻿html, body {
   margin: 0;
   height: 100%;
   font-family: system-ui, sans-serif;
@@ -142,69 +142,48 @@ button:disabled {
   min-height: 1em;
 }
 
-#sections-panel {
+#ctx-menu {
   display: none;
   position: fixed;
-  top: 56px;
-  right: 336px;
-  width: 280px;
-  box-sizing: border-box;
+  min-width: 240px;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  padding: 4px;
   background: #2b2d31;
-  border: 1px solid #3a3c42;
-  border-radius: 8px;
-  z-index: 20;
+  border: 1px solid #4a4d55;
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  z-index: 50;
   font-size: 13px;
 }
 
-#sections-panel.open {
+#ctx-menu.open {
   display: flex;
 }
 
-#sections-panel h3 {
-  margin: 0;
-  font-size: 14px;
+#ctx-menu .title {
+  padding: 4px 10px 6px;
+  color: #9aa0a6;
+  font-size: 12px;
 }
 
-#sections-panel button {
-  background: #1e1f22;
+#ctx-menu button {
+  background: none;
+  border: 0;
   color: inherit;
-  border: 1px solid #3a3c42;
-  border-radius: 4px;
-  padding: 3px 8px;
   font: inherit;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
-#sections-panel .cut-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+#ctx-menu button:hover {
+  background: #404eed;
 }
 
-#sections-panel .cut-head span {
-  flex: 1;
+#sections-clear[hidden] {
+  display: none;
 }
-
-#sections-panel .cut-body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-#sections-panel input[type="range"] {
-  flex: 1;
-}
-
-#sections-panel output {
-  width: 48px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
 #results-window {
   display: none;
   position: fixed;
@@ -315,3 +294,4 @@ button:disabled {
   background: none;
   cursor: pointer;
 }
+

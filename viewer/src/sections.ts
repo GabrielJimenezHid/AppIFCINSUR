@@ -5,115 +5,139 @@ type Axis = "y" | "x" | "z";
 
 interface Cut {
   axis: Axis;
-  label: string;
   vector: THREE.Vector3;
   plane: THREE.Plane;
   active: boolean;
-  side: 1 | -1;
-  value: number;
 }
 
 interface Options {
   world: OBC.SimpleWorld<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer>;
   fragments: OBC.FragmentsManager;
+  container: HTMLElement;
 }
 
-export function initSections({ world, fragments }: Options) {
-  const panel = document.getElementById("sections-panel") as HTMLElement;
-  const toggle = document.getElementById("sections-toggle") as HTMLButtonElement;
+const ENTRIES: { axis: Axis; side: 1 | -1; label: string }[] = [
+  { axis: "y", side: 1, label: "Planta (Y): ocultar lo de arriba" },
+  { axis: "y", side: -1, label: "Planta (Y): ocultar lo de abajo" },
+  { axis: "x", side: 1, label: "Corte X: ocultar lado +X" },
+  { axis: "x", side: -1, label: "Corte X: ocultar lado −X" },
+  { axis: "z", side: 1, label: "Corte Z: ocultar lado +Z" },
+  { axis: "z", side: -1, label: "Corte Z: ocultar lado −Z" },
+];
 
-  const defs: { axis: Axis; label: string; vector: THREE.Vector3 }[] = [
-    { axis: "y", label: "Planta (horizontal)", vector: new THREE.Vector3(0, 1, 0) },
-    { axis: "x", label: "Corte vertical X", vector: new THREE.Vector3(1, 0, 0) },
-    { axis: "z", label: "Corte vertical Z", vector: new THREE.Vector3(0, 0, 1) },
-  ];
-  const cuts: Cut[] = defs.map((c) => ({
-    ...c,
-    plane: new THREE.Plane(),
-    active: false,
-    side: 1,
-    value: 0,
-  }));
+export function initSections({ world, fragments, container }: Options) {
+  const clearBtn = document.getElementById("sections-clear") as HTMLButtonElement;
 
-  const bounds = () => {
-    const box = new THREE.Box3();
-    for (const model of fragments.list.values()) box.union(model.box);
-    return box.isEmpty() ? new THREE.Box3(new THREE.Vector3(-50, -50, -50), new THREE.Vector3(50, 50, 50)) : box;
+  const cuts: Record<Axis, Cut> = {
+    y: { axis: "y", vector: new THREE.Vector3(0, 1, 0), plane: new THREE.Plane(), active: false },
+    x: { axis: "x", vector: new THREE.Vector3(1, 0, 0), plane: new THREE.Plane(), active: false },
+    z: { axis: "z", vector: new THREE.Vector3(0, 0, 1), plane: new THREE.Plane(), active: false },
   };
 
-  function applyCut(cut: Cut) {
-    cut.plane.normal.copy(cut.vector).multiplyScalar(-cut.side);
-    cut.plane.constant = cut.side * cut.value;
-    world.renderer!.setPlane(cut.active, cut.plane);
+  const menu = document.createElement("div");
+  menu.id = "ctx-menu";
+  document.body.appendChild(menu);
+
+  const anyActive = () => Object.values(cuts).some((c) => c.active);
+
+  function refresh() {
     world.renderer!.updateClippingPlanes();
     fragments.core.update(true);
+    clearBtn.hidden = !anyActive();
   }
 
-  function render() {
-    const box = bounds();
-    panel.innerHTML = `<h3>Cortes</h3>`;
+  function setCut(axis: Axis, side: 1 | -1, value: number) {
+    const cut = cuts[axis];
+    cut.plane.normal.copy(cut.vector).multiplyScalar(-side);
+    cut.plane.constant = side * value;
+    cut.active = true;
+    world.renderer!.setPlane(true, cut.plane);
+    refresh();
+  }
 
-    for (const cut of cuts) {
-      const min = box.min[cut.axis];
-      const max = box.max[cut.axis];
-      if (cut.value < min || cut.value > max) cut.value = max;
+  function clearCuts() {
+    for (const cut of Object.values(cuts)) {
+      cut.active = false;
+      world.renderer!.setPlane(false, cut.plane);
+    }
+    refresh();
+  }
 
-      const row = document.createElement("div");
-      row.className = "cut";
-      row.innerHTML = `
-        <label class="cut-head">
-          <input type="checkbox" ${cut.active ? "checked" : ""}/>
-          <span>${cut.label}</span>
-          <button type="button" title="Invertir el lado que se oculta">⇅</button>
-        </label>
-        <div class="cut-body">
-          <input type="range" min="${min}" max="${max}" step="${(max - min) / 400 || 0.01}" value="${cut.value}"/>
-          <output>${cut.value.toFixed(2)}</output>
-        </div>`;
+  function closeMenu() {
+    menu.classList.remove("open");
+  }
 
-      const check = row.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-      const slider = row.querySelector<HTMLInputElement>('input[type="range"]')!;
-      const output = row.querySelector("output")!;
-      const flip = row.querySelector("button")!;
+  function openMenu(x: number, y: number, point: THREE.Vector3 | null) {
+    menu.innerHTML = "";
 
-      check.addEventListener("change", () => {
-        cut.active = check.checked;
-        applyCut(cut);
-      });
-      slider.addEventListener("input", () => {
-        cut.value = Number(slider.value);
-        output.textContent = cut.value.toFixed(2);
-        if (!cut.active) {
-          cut.active = true;
-          check.checked = true;
-        }
-        applyCut(cut);
-      });
-      flip.addEventListener("click", (e) => {
-        e.preventDefault();
-        cut.side = cut.side === 1 ? -1 : 1;
-        applyCut(cut);
-      });
+    if (point) {
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = "Cortar por el punto seleccionado";
+      menu.appendChild(title);
 
-      panel.appendChild(row);
+      for (const entry of ENTRIES) {
+        const item = document.createElement("button");
+        item.textContent = entry.label;
+        item.addEventListener("click", () => {
+          setCut(entry.axis, entry.side, point[entry.axis]);
+          closeMenu();
+        });
+        menu.appendChild(item);
+      }
     }
 
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.textContent = "Quitar cortes";
-    clear.addEventListener("click", () => {
-      for (const cut of cuts) {
-        cut.active = false;
-        cut.side = 1;
-        applyCut(cut);
-      }
-      render();
-    });
-    panel.appendChild(clear);
+    if (anyActive()) {
+      const clear = document.createElement("button");
+      clear.textContent = "Quitar todos los cortes";
+      clear.addEventListener("click", () => {
+        clearCuts();
+        closeMenu();
+      });
+      menu.appendChild(clear);
+    }
+
+    if (!menu.childElementCount) return;
+
+    menu.classList.add("open");
+    const { innerWidth, innerHeight } = window;
+    menu.style.left = `${Math.min(x, innerWidth - menu.offsetWidth - 8)}px`;
+    menu.style.top = `${Math.min(y, innerHeight - menu.offsetHeight - 8)}px`;
   }
 
-  toggle.addEventListener("click", () => {
-    panel.classList.toggle("open");
-    if (panel.classList.contains("open")) render();
+  clearBtn.addEventListener("click", clearCuts);
+
+  let downAt: { x: number; y: number } | null = null;
+  container.addEventListener("mousedown", (e) => {
+    if (e.button === 2) downAt = { x: e.clientX, y: e.clientY };
   });
+
+  container.addEventListener("contextmenu", async (event) => {
+    event.preventDefault();
+    const moved =
+      downAt !== null &&
+      Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y) > 5;
+    downAt = null;
+    if (moved) return;
+
+    const mouse = new THREE.Vector2(event.clientX, event.clientY);
+    const dom = world.renderer!.three.domElement;
+    let point: THREE.Vector3 | null = null;
+    for (const model of fragments.list.values()) {
+      const hit = await model.raycast({ camera: world.camera.three, mouse, dom });
+      if (hit) {
+        point = hit.point;
+        break;
+      }
+    }
+    openMenu(event.clientX, event.clientY, point);
+  });
+
+  window.addEventListener("mousedown", (e) => {
+    if (!menu.contains(e.target as Node)) closeMenu();
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenu();
+  });
+  window.addEventListener("wheel", closeMenu, { passive: true });
 }
