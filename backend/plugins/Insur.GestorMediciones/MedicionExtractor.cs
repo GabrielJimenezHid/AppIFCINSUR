@@ -12,6 +12,7 @@ internal static class MedicionExtractor
     private const string ParamCriterio = "IDS-MED-CriterioMedicion";
     private const string PrefijoMaterial = "IDS-M-";
     private const string NoMedible = "No Medible";
+    private const string CodigoPerimetro = "05.08.01";
 
     private static readonly string[] ParamsVentanaAnidados =
     [
@@ -28,7 +29,6 @@ internal static class MedicionExtractor
         var f = model.ModelFactors.LengthToMetresConversionFactor;
         var rows = new List<MedicionRow>();
         var seen = new HashSet<string>();
-
         var index = ModelIndex.Build(model);
 
         foreach (var elem in model.Instances.OfType<IIfcElement>())
@@ -41,10 +41,10 @@ internal static class MedicionExtractor
             if (string.IsNullOrWhiteSpace(codigo)) continue;
             if (!options.IncluirNoMedible && codigo.Equals(NoMedible, StringComparison.OrdinalIgnoreCase)) continue;
 
-            var criterio = data.Prop(ParamCriterio);
-            if (tipo == Tipo.Techo) criterio = "m2";
-            if (string.IsNullOrWhiteSpace(criterio)) criterio = CriterioPorDefecto(tipo);
-            criterio = criterio.Trim().ToLowerInvariant();
+            var criterioModelo = data.Prop(ParamCriterio);
+            if (tipo == Tipo.Techo) criterioModelo = "m2";
+            if (string.IsNullOrWhiteSpace(criterioModelo)) criterioModelo = CriterioPorDefecto(tipo);
+            criterioModelo = criterioModelo.Trim().ToLowerInvariant();
 
             var ml = data.Qty("Length") ?? 0;
             var m2 = tipo switch
@@ -53,7 +53,12 @@ internal static class MedicionExtractor
                 _ => data.Qty("NetArea", "Area", "GrossArea", "NetSideArea", "GrossFootprintArea"),
             } ?? 0;
             var m3 = data.Qty("NetVolume", "GrossVolume") ?? 0;
-            var cantidad = Cantidad(tipo, criterio, data, ml, m2, m3);
+            var cc = tipo == Tipo.Muro ? ml * (data.Qty("Height") ?? 0) : 0;
+            var perimetro = tipo is Tipo.Suelo or Tipo.Cubierta ? data.Qty("Perimeter") ?? 0 : 0;
+            var medidas = new Medidas(ml, m2, m3, cc);
+
+            var capitulo = Capitulo(codigo);
+            var criterio = CriterioFinal(categoria, tipo, criterioModelo, capitulo);
 
             if (options.EliminarDuplicados)
             {
@@ -66,9 +71,10 @@ internal static class MedicionExtractor
             var guid = elem.GlobalId.ToString();
 
             string Desc(string c) => codes.TryGetValue(c, out var d) ? d : "";
+            var cantidad = Valor(criterio, medidas);
 
             rows.Add(new MedicionRow(categoria, familia, nombreTipo, criterio, codigo, Desc(codigo),
-                Capitulo(codigo), guid, cantidad, ml, m2, m3));
+                capitulo, guid, cantidad));
 
             if (tipo is Tipo.Muro or Tipo.Suelo or Tipo.Techo)
             {
@@ -77,8 +83,10 @@ internal static class MedicionExtractor
                     var desc = codes.TryGetValue(codMat, out var d)
                         ? d
                         : string.Join(" | ", new[] { familia, nombreTipo }.Where(s => !string.IsNullOrWhiteSpace(s)));
-                    rows.Add(new MedicionRow(categoria + "-Material", familia, nombreTipo, "m2", codMat, desc,
-                        Capitulo(codMat), guid, m2, ml, m2, m3));
+                    var capMat = Capitulo(codMat);
+                    var critMat = CriterioFinal(categoria + "-Material", tipo, "m2", capMat);
+                    rows.Add(new MedicionRow(categoria + "-Material", familia, nombreTipo, critMat, codMat, desc,
+                        capMat, guid, Valor(critMat, medidas)));
                 }
             }
 
@@ -89,39 +97,39 @@ internal static class MedicionExtractor
                     var anidado = data.Prop(param);
                     if (string.IsNullOrWhiteSpace(anidado)) continue;
                     rows.Add(new MedicionRow(categoria, familia, nombreTipo, criterio, anidado, Desc(anidado),
-                        Capitulo(anidado), guid, cantidad, ml, m2, m3));
+                        Capitulo(anidado), guid, cantidad));
                 }
+            }
+
+            if (perimetro > 0 && capitulo.StartsWith("C05", StringComparison.Ordinal))
+            {
+                rows.Add(new MedicionRow(categoria, familia, nombreTipo + " [Perímetro]", "ml", CodigoPerimetro,
+                    Desc(CodigoPerimetro), Capitulo(CodigoPerimetro), guid, perimetro));
             }
         }
 
         return rows;
     }
 
-    private static double Cantidad(Tipo tipo, string criterio, ElementData data, double ml, double m2, double m3)
+    private static string CriterioFinal(string categoria, Tipo tipo, string criterio, string capitulo)
     {
-        if (criterio == "ud") return 1;
-        switch (tipo)
-        {
-            case Tipo.Muro:
-                if (criterio == "ml") return ml;
-                if (criterio == "m3") return m3;
-                if (criterio == "m2cc") return ml * (data.Qty("Height") ?? 0);
-                return m2;
-            case Tipo.Suelo:
-                return criterio == "m3" ? m3 : m2;
-            case Tipo.Cubierta:
-            case Tipo.Techo:
-                return m2;
-            case Tipo.Barandilla:
-                return ml;
-            case Tipo.Pilar:
-                return criterio == "m3" ? m3 : 1;
-            case Tipo.Armazon:
-                return criterio == "m3" ? m3 : ml;
-            default:
-                return 1;
-        }
+        var esMuro = categoria.Contains("muro", StringComparison.OrdinalIgnoreCase);
+        if (esMuro && criterio == "m2" &&
+            (capitulo.StartsWith("C06", StringComparison.Ordinal) ||
+             capitulo.StartsWith("C07", StringComparison.Ordinal) ||
+             capitulo.StartsWith("C08", StringComparison.Ordinal)))
+            return "m2cc";
+        return criterio;
     }
+
+    private static double Valor(string criterio, Medidas m) => criterio switch
+    {
+        "ml" => m.Ml,
+        "m2" => m.M2,
+        "m3" => m.M3,
+        "m2cc" => m.Cc,
+        _ => 1,
+    };
 
     private static string CriterioPorDefecto(Tipo tipo) => tipo switch
     {
@@ -197,3 +205,5 @@ internal static class MedicionExtractor
         return string.Join("|", parts);
     }
 }
+
+internal readonly record struct Medidas(double Ml, double M2, double M3, double Cc);

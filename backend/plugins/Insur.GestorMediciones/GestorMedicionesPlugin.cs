@@ -50,7 +50,7 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
                 g.Key.Categoria, g.Key.Familia, g.Key.Tipo, g.Key.Criterio, g.Key.Codigo,
                 g.First().Descripcion, g.First().Capitulo,
                 g.Select(r => r.GlobalId).Distinct().ToList(),
-                g.Sum(r => r.Cantidad), g.Sum(r => r.Ml), g.Sum(r => r.M2), g.Sum(r => r.M3)))
+                g.Key.Criterio == "ud" ? g.Select(r => r.GlobalId).Distinct().Count() : g.Sum(r => r.Cantidad)))
             .OrderBy(g => g.Capitulo, StringComparer.Ordinal).ThenBy(g => g.Codigo).ThenBy(g => g.Categoria)
             .ThenBy(g => g.Familia).ThenBy(g => g.Tipo)
             .ToList();
@@ -73,10 +73,7 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
             new("descripcion", "Descripción"),
             new("criterio", "Criterio"),
             new("elementos", "Nº elem.", "number"),
-            new("cantidad", "Cantidad", "number"),
-            new("ml", "ML", "number"),
-            new("m2", "M2", "number"),
-            new("m3", "M3", "number"),
+            new("cantidad", "Medición", "number"),
         ];
 
         var rows = groups.Select(g => new TableRow(
@@ -88,12 +85,11 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
                 ["codigo"] = g.Codigo,
                 ["capitulo"] = g.Capitulo,
                 ["descripcion"] = g.Descripcion,
-                ["criterio"] = g.Criterio,
+                ["criterio"] = Etiqueta(g.Criterio),
                 ["elementos"] = g.GlobalIds.Count,
-                ["cantidad"] = Math.Round(g.Cantidad, 3),
-                ["ml"] = Math.Round(g.Ml, 3),
-                ["m2"] = Math.Round(g.M2, 3),
-                ["m3"] = Math.Round(g.M3, 3),
+                ["cantidad"] = g.Criterio == "ud"
+                    ? g.Cantidad.ToString("N0", Es)
+                    : g.Cantidad.ToString("N2", Es),
             },
             g.GlobalIds)).ToList();
 
@@ -108,8 +104,8 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
         var ws = wb.Worksheets.Add("Mediciones");
         string[] headers =
             ["Categoría", "Familia y Tipo", "Código", "Descripción", "Criterio",
-             "Nº elementos", "Cantidad", "ML", "M2", "M3"];
-        const int lastCol = 10;
+             "Nº elementos", "Medición"];
+        const int lastCol = 7;
 
         var r = 1;
         foreach (var chapter in groups.GroupBy(g => g.Capitulo))
@@ -134,13 +130,10 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
                 ws.Cell(r, 2).Value = string.Join(" | ", new[] { g.Familia, g.Tipo }.Where(s => s.Length > 0));
                 ws.Cell(r, 3).Value = g.Codigo;
                 ws.Cell(r, 4).Value = g.Descripcion;
-                ws.Cell(r, 5).Value = g.Criterio;
+                ws.Cell(r, 5).Value = Etiqueta(g.Criterio);
                 ws.Cell(r, 6).Value = g.GlobalIds.Count;
-                ws.Cell(r, 7).Value = Math.Round(g.Cantidad, 3);
-                ws.Cell(r, 8).Value = Math.Round(g.Ml, 3);
-                ws.Cell(r, 9).Value = Math.Round(g.M2, 3);
-                ws.Cell(r, 10).Value = Math.Round(g.M3, 3);
-                ws.Range(r, 7, r, 10).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(r, 7).Value = g.Criterio == "ud" ? Math.Round(g.Cantidad) : Math.Round(g.Cantidad, 2);
+                ws.Cell(r, 7).Style.NumberFormat.Format = g.Criterio == "ud" ? "#,##0" : "#,##0.00";
                 r++;
             }
             r++;
@@ -153,6 +146,10 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
         return ms.ToArray();
     }
 
+    private static readonly System.Globalization.CultureInfo Es = new("es-ES");
+
+    private static string Etiqueta(string criterio) => criterio == "m2cc" ? "m2CC" : criterio;
+
     private static bool IsTrue(PluginContext ctx, string name, bool fallback) =>
         ctx.Parameters.TryGetValue(name, out var v) && bool.TryParse(v, out var b) ? b : fallback;
 }
@@ -162,12 +159,12 @@ internal sealed record MedicionOptions(bool IncluirNoMedible, bool EliminarDupli
 internal sealed record MedicionRow(
     string Categoria, string Familia, string Tipo, string Criterio, string Codigo,
     string Descripcion, string Capitulo, string GlobalId,
-    double Cantidad, double Ml, double M2, double M3);
+    double Cantidad);
 
 internal sealed record MedicionGroup(
     string Categoria, string Familia, string Tipo, string Criterio, string Codigo,
     string Descripcion, string Capitulo, List<string> GlobalIds,
-    double Cantidad, double Ml, double M2, double M3);
+    double Cantidad);
 
 internal static class CodeDictionary
 {
