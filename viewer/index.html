@@ -13,7 +13,6 @@
         <input id="file" type="file" accept=".ifc" hidden />
       </label>
       <button id="plugins-toggle" class="btn">Plugins</button>
-      <button id="sections-clear" class="btn" hidden>Quitar cortes</button>
       <span id="status">Selecciona un archivo IFC</span>
     </div>
     <section id="plugins-panel">
@@ -34,6 +33,14 @@
       <div id="results-body"></div>
     </section>
     <div id="container"></div>
+    <div id="section-bar" hidden>
+      <span>Plano de corte</span>
+      <button data-axis="x" class="ax-x">X</button>
+      <button data-axis="y" class="ax-y">Y</button>
+      <button data-axis="z" class="ax-z">Z</button>
+      <button data-flip title="Invertir el lado que se oculta">⇅ Invertir</button>
+      <button data-clear>Quitar</button>
+    </div>
     <aside id="props">Haz clic en un elemento para ver sus propiedades</aside>
     <script type="module" src="/src/main.ts"></script>
   </body>

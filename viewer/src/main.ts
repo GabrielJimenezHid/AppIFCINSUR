@@ -63,7 +63,7 @@ let selected: { model: FragmentsModel; localId: number } | null = null;
 let currentFile: File | null = null;
 
 initPlugins({ getFile: () => currentFile, components, fragments });
-initSections({ world, fragments, container });
+const sections = initSections({ world, fragments, getSelected: () => selected });
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
@@ -167,6 +167,7 @@ function escapeHtml(text: string): string {
 }
 
 container.addEventListener("click", async (event) => {
+  if (sections.isBusy()) return;
   const canvas = world.renderer!.three.domElement;
   const mouse = new THREE.Vector2(event.clientX, event.clientY);
   const dom = canvas;
@@ -185,10 +186,12 @@ container.addEventListener("click", async (event) => {
   if (!hit) {
     propsEl.textContent = "Haz clic en un elemento para ver sus propiedades";
     fragments.core.update(true);
+    sections.refreshSelection();
     return;
   }
 
   selected = { model: hit.fragments, localId: hit.localId };
+  sections.refreshSelection();
   propsEl.textContent = `Elemento #${hit.localId}: cargando propiedades...`;
 
   try {
