@@ -36,8 +36,13 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
             ? CodeDictionary.Load(excelPath)
             : new Dictionary<string, string>();
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         using var model = IfcStore.Open(context.IfcPath);
+        var openMs = sw.ElapsedMilliseconds;
+        sw.Restart();
         var rows = MedicionExtractor.Extract(model, options, codes);
+        var extractMs = sw.ElapsedMilliseconds;
+        Console.WriteLine($"[GestorMediciones] apertura IFC: {openMs} ms, extraccion: {extractMs} ms, filas: {rows.Count}");
 
         var groups = rows
             .GroupBy(r => (r.Categoria, r.Familia, r.Tipo, r.Criterio, r.Codigo))

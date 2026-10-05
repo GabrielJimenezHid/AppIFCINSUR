@@ -29,12 +29,14 @@ internal static class MedicionExtractor
         var rows = new List<MedicionRow>();
         var seen = new HashSet<string>();
 
+        var index = ModelIndex.Build(model);
+
         foreach (var elem in model.Instances.OfType<IIfcElement>())
         {
             var (categoria, tipo) = Categorize(elem);
             if (categoria is null) continue;
 
-            var data = ElementData.Read(elem, f);
+            var data = ElementData.Read(elem, f, index);
             var codigo = data.Prop(ParamCodigo);
             if (string.IsNullOrWhiteSpace(codigo)) continue;
             if (!options.IncluirNoMedible && codigo.Equals(NoMedible, StringComparison.OrdinalIgnoreCase)) continue;
