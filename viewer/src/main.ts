@@ -3,6 +3,7 @@ import * as THREE from "three";
 import * as OBC from "@thatopen/components";
 import type { FragmentsModel } from "@thatopen/fragments";
 import { initPlugins } from "./plugins";
+import { initSections } from "./sections";
 
 const ALLOWED_PSETS = ["INSUR_Medicion"];
 const MEASURABLE_MATERIAL_PREFIX = "IDS-M-";
@@ -62,6 +63,7 @@ let selected: { model: FragmentsModel; localId: number } | null = null;
 let currentFile: File | null = null;
 
 initPlugins({ getFile: () => currentFile, components, fragments });
+initSections({ world, fragments });
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];

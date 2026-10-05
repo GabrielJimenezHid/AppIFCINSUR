@@ -142,6 +142,69 @@ button:disabled {
   min-height: 1em;
 }
 
+#sections-panel {
+  display: none;
+  position: fixed;
+  top: 56px;
+  right: 336px;
+  width: 280px;
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: #2b2d31;
+  border: 1px solid #3a3c42;
+  border-radius: 8px;
+  z-index: 20;
+  font-size: 13px;
+}
+
+#sections-panel.open {
+  display: flex;
+}
+
+#sections-panel h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+#sections-panel button {
+  background: #1e1f22;
+  color: inherit;
+  border: 1px solid #3a3c42;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+#sections-panel .cut-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#sections-panel .cut-head span {
+  flex: 1;
+}
+
+#sections-panel .cut-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+#sections-panel input[type="range"] {
+  flex: 1;
+}
+
+#sections-panel output {
+  width: 48px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 #results-window {
   display: none;
   position: fixed;
