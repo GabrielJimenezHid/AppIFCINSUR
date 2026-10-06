@@ -32,11 +32,17 @@ public sealed record PluginContext(
 
 public abstract record PluginResult;
 
-public sealed record TableColumn(string Key, string Label, string Type = "text");
+/// <summary>
+/// Type: "text", "number" o "select". Con ValueFrom, la celda muestra Values[valor de la columna ValueFrom] de la fila.
+/// En una columna "select" las opciones son las claves de TableRow.Values.
+/// </summary>
+public sealed record TableColumn(string Key, string Label, string Type = "text", string? ValueFrom = null);
 
 public sealed record TableRow(
     IReadOnlyDictionary<string, object?> Cells,
-    IReadOnlyList<string> ElementIds);
+    IReadOnlyList<string> ElementIds,
+    string? Id = null,
+    IReadOnlyDictionary<string, double>? Values = null);
 
 public sealed record TableResult(
     string Title,

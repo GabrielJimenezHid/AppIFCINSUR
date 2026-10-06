@@ -20,11 +20,14 @@ interface Column {
   key: string;
   label: string;
   type: string;
+  valueFrom?: string | null;
 }
 
 interface Row {
   cells: Record<string, unknown>;
   elementIds: string[];
+  id?: string | null;
+  values?: Record<string, number> | null;
 }
 
 interface TableResult {
@@ -38,6 +41,14 @@ interface TableResult {
 interface RowState {
   selected: boolean;
   color: string;
+  choice: string;
+}
+
+function formatValue(value: number | undefined, choice: string): string {
+  if (value === undefined) return "";
+  return choice === "ud"
+    ? Math.round(value).toLocaleString("es-ES")
+    : value.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 interface Options {
@@ -169,6 +180,14 @@ export function initPlugins({ getFile, components, fragments }: Options) {
       }
     }
 
+    if (table?.rows.some((r) => r.id)) {
+      const overrides: Record<string, string> = {};
+      table.rows.forEach((row, i) => {
+        if (row.id && states[i]?.choice) overrides[row.id] = states[i].choice;
+      });
+      body.append("overrides", JSON.stringify(overrides));
+    }
+
     status.textContent = "Procesando en el servidor... (puede tardar)";
     setButtonsDisabled(true);
     try {
@@ -212,7 +231,12 @@ export function initPlugins({ getFile, components, fragments }: Options) {
   function showResults(result: TableResult) {
     table = result;
     guidCache.clear();
-    states = result.rows.map((_, i) => ({ selected: false, color: paletteColor(i) }));
+    const selectKey = result.columns.find((c) => c.type === "select")?.key;
+    states = result.rows.map((row, i) => ({
+      selected: false,
+      color: paletteColor(i),
+      choice: selectKey ? String(row.cells[selectKey] ?? "") : "",
+    }));
     winTitle.textContent = result.title;
     winSummary.textContent = result.summary ?? "";
     renderTable();
@@ -244,6 +268,20 @@ export function initPlugins({ getFile, components, fragments }: Options) {
         const row = table.rows[i];
         const cells = columns
           .map((c) => {
+            if (c.type === "select" && row.values) {
+              const options = Object.keys(row.values)
+                .map(
+                  (o) =>
+                    `<option value="${esc(o)}" ${o === states[i].choice ? "selected" : ""}>${esc(o)}</option>`,
+                )
+                .join("");
+              const disabled = Object.keys(row.values).length < 2 ? "disabled" : "";
+              return `<td><select class="row-crit" ${disabled}>${options}</select></td>`;
+            }
+            if (c.valueFrom && row.values) {
+              const text = formatValue(row.values[states[i].choice], states[i].choice);
+              return `<td class="num" data-value-cell>${esc(text)}</td>`;
+            }
             const v = row.cells[c.key];
             const text =
               c.type === "number" && typeof v === "number"
@@ -279,7 +317,7 @@ export function initPlugins({ getFile, components, fragments }: Options) {
       return;
     }
 
-    if (target.tagName === "INPUT") return;
+    if (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "OPTION") return;
     winBody.querySelector("tr.selected")?.classList.remove("selected");
     tr.classList.add("selected");
     await isolateRows([Number(tr.dataset.row)]);
@@ -290,7 +328,14 @@ export function initPlugins({ getFile, components, fragments }: Options) {
     const tr = target.closest("tr");
     if (!tr) return;
 
-    if (target.classList.contains("row-sel")) {
+    if (target.classList.contains("row-crit")) {
+      const index = Number(tr.dataset.row);
+      states[index].choice = target.value;
+      const cell = tr.querySelector("[data-value-cell]");
+      if (cell && table) {
+        cell.textContent = formatValue(table.rows[index].values?.[target.value], target.value);
+      }
+    } else if (target.classList.contains("row-sel")) {
       states[Number(tr.dataset.row)].selected = target.checked;
     } else if (target.classList.contains("row-color")) {
       states[Number(tr.dataset.row)].color = target.value;

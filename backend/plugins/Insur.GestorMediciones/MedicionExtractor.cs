@@ -1,4 +1,3 @@
-using System.Globalization;
 using Xbim.Ifc;
 using Xbim.Ifc4.Interfaces;
 
@@ -24,11 +23,13 @@ internal static class MedicionExtractor
         "IDS-MED-CodigoMedicionAnidado-MecanismoOcilobatiente",
     ];
 
+    private static readonly string[] SoloUd = ["ud"];
+    private static readonly string[] SoloMl = ["ml"];
+
     public static List<MedicionRow> Extract(IfcStore model, MedicionOptions options, Dictionary<string, string> codes)
     {
         var f = model.ModelFactors.LengthToMetresConversionFactor;
         var rows = new List<MedicionRow>();
-        var seen = new HashSet<string>();
         var index = ModelIndex.Build(model);
 
         foreach (var elem in model.Instances.OfType<IIfcElement>())
@@ -60,25 +61,19 @@ internal static class MedicionExtractor
             var cc = tipo == Tipo.Muro ? ml * (data.Qty("Height") ?? 0) : 0;
             var perimetro = tipo is Tipo.Suelo or Tipo.Cubierta ? data.Qty("Perimeter") ?? 0 : 0;
             var medidas = new Medidas(ml, m2, m3, cc);
+            var permitidos = Permitidos(tipo);
 
             var capitulo = Capitulo(codigo);
-            var criterio = CriterioFinal(categoria, tipo, criterioModelo, capitulo);
-
-            if (options.EliminarDuplicados)
-            {
-                var key = $"{categoria}|{data.TypeName}|{codigo}|{Round(ml)}|{Round(m2)}|{Round(m3)}|{PlacementKey(elem)}";
-                if (!seen.Add(key)) continue;
-            }
+            var criterio = CriterioInicial(categoria, criterioModelo, capitulo, permitidos);
 
             var familia = data.Family;
             var nombreTipo = data.TypeShortName;
             var guid = elem.GlobalId.ToString();
 
             string Desc(string c) => codes.TryGetValue(c, out var d) ? d : "";
-            var cantidad = Valor(criterio, medidas);
 
             rows.Add(new MedicionRow(categoria, familia, nombreTipo, criterio, codigo, Desc(codigo),
-                capitulo, guid, cantidad));
+                capitulo, guid, medidas, permitidos));
 
             if (tipo is Tipo.Muro or Tipo.Suelo or Tipo.Techo)
             {
@@ -88,9 +83,9 @@ internal static class MedicionExtractor
                         ? d
                         : string.Join(" | ", new[] { familia, nombreTipo }.Where(s => !string.IsNullOrWhiteSpace(s)));
                     var capMat = Capitulo(codMat);
-                    var critMat = CriterioFinal(categoria + "-Material", tipo, "m2", capMat);
+                    var critMat = CriterioInicial(categoria + "-Material", "m2", capMat, permitidos);
                     rows.Add(new MedicionRow(categoria + "-Material", familia, nombreTipo, critMat, codMat, desc,
-                        capMat, guid, Valor(critMat, medidas)));
+                        capMat, guid, medidas, permitidos));
                 }
             }
 
@@ -100,39 +95,41 @@ internal static class MedicionExtractor
                 {
                     var anidado = data.Prop(param);
                     if (string.IsNullOrWhiteSpace(anidado)) continue;
-                    rows.Add(new MedicionRow(categoria, familia, nombreTipo, criterio, anidado, Desc(anidado),
-                        Capitulo(anidado), guid, cantidad));
+                    rows.Add(new MedicionRow(categoria, familia, nombreTipo, "ud", anidado, Desc(anidado),
+                        Capitulo(anidado), guid, medidas, SoloUd));
                 }
             }
 
             if (perimetro > 0 && capitulo.StartsWith("C05", StringComparison.Ordinal))
             {
                 rows.Add(new MedicionRow(categoria, familia, nombreTipo + " [Perímetro]", "ml", CodigoPerimetro,
-                    Desc(CodigoPerimetro), Capitulo(CodigoPerimetro), guid, perimetro));
+                    Desc(CodigoPerimetro), Capitulo(CodigoPerimetro), guid, new Medidas(perimetro, 0, 0, 0), SoloMl));
             }
         }
 
         return rows;
     }
 
-    private static string CriterioFinal(string categoria, Tipo tipo, string criterio, string capitulo)
+    private static string CriterioInicial(string categoria, string criterio, string capitulo, string[] permitidos)
     {
         var esMuro = categoria.Contains("muro", StringComparison.OrdinalIgnoreCase);
         if (esMuro && criterio == "m2" &&
             (capitulo.StartsWith("C06", StringComparison.Ordinal) ||
              capitulo.StartsWith("C07", StringComparison.Ordinal) ||
              capitulo.StartsWith("C08", StringComparison.Ordinal)))
-            return "m2cc";
-        return criterio;
+            criterio = "m2cc";
+        return permitidos.Contains(criterio) ? criterio : permitidos[0];
     }
 
-    private static double Valor(string criterio, Medidas m) => criterio switch
+    private static string[] Permitidos(Tipo tipo) => tipo switch
     {
-        "ml" => m.Ml,
-        "m2" => m.M2,
-        "m3" => m.M3,
-        "m2cc" => m.Cc,
-        _ => 1,
+        Tipo.Muro => ["m2", "m3", "ml", "m2cc", "ud"],
+        Tipo.Suelo => ["m2", "m3", "ud"],
+        Tipo.Cubierta or Tipo.Techo => ["m2", "ud"],
+        Tipo.Barandilla => ["ml", "ud"],
+        Tipo.Pilar => ["m3", "ud"],
+        Tipo.Armazon => ["ml", "m3", "ud"],
+        _ => SoloUd,
     };
 
     private static string CriterioPorDefecto(Tipo tipo) => tipo switch
@@ -188,25 +185,6 @@ internal static class MedicionExtractor
         return limpio.Length >= 2 && MapaPrefijo.TryGetValue(limpio[..2], out var cap)
             ? cap
             : "SIN CLASIFICAR";
-    }
-
-    private static string Round(double v) => Math.Round(v, 3).ToString(CultureInfo.InvariantCulture);
-
-    private static string PlacementKey(IIfcElement elem)
-    {
-        var parts = new List<string>();
-        var placement = elem.ObjectPlacement as IIfcLocalPlacement;
-        var guard = 0;
-        while (placement is not null && guard++ < 32)
-        {
-            if (placement.RelativePlacement is IIfcAxis2Placement3D axis)
-            {
-                var c = axis.Location.Coordinates;
-                parts.Add(string.Join(",", c.Select(v => Round(v))));
-            }
-            placement = placement.PlacementRelTo as IIfcLocalPlacement;
-        }
-        return string.Join("|", parts);
     }
 }
 

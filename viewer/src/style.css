@@ -312,3 +312,18 @@ button:disabled {
 }
 
 
+
+#results-body select.row-crit {
+  background: #1e1f22;
+  color: inherit;
+  border: 1px solid #3a3c42;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font: inherit;
+}
+
+#results-body select.row-crit:disabled {
+  opacity: 0.6;
+  border-color: transparent;
+  appearance: none;
+}

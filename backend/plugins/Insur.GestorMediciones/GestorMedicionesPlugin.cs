@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using ClosedXML.Excel;
 using Insur.Plugins.Abstractions;
 using Xbim.Ifc;
@@ -9,13 +11,12 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
     public PluginManifest Manifest { get; } = new(
         Id: "gestor-mediciones",
         Name: "Gestor de Mediciones",
-        Version: "0.1.0",
-        Description: "Agrupa los elementos del IFC por categoría, tipo y código de medición y suma sus cantidades.",
+        Version: "0.2.0",
+        Description: "Agrupa los elementos del IFC por capítulo, tipo y código de medición y suma sus cantidades según el criterio.",
         Parameters:
         [
             new PluginParameter("excelCodigos", "Excel de códigos (IDS-CodigosPrestoBlanco.xlsx)", "file"),
             new PluginParameter("incluirNoMedible", "Incluir elementos 'No Medible'", "bool", "false"),
-            new PluginParameter("eliminarDuplicados", "Descartar elementos duplicados", "bool", "true"),
         ],
         Actions:
         [
@@ -28,29 +29,19 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
 
     private PluginResult Run(PluginContext context)
     {
-        var options = new MedicionOptions(
-            IncluirNoMedible: IsTrue(context, "incluirNoMedible", false),
-            EliminarDuplicados: IsTrue(context, "eliminarDuplicados", true));
+        var options = new MedicionOptions(IncluirNoMedible: IsTrue(context, "incluirNoMedible", false));
 
         var codes = context.Files.TryGetValue("excelCodigos", out var excelPath)
             ? CodeDictionary.Load(excelPath)
             : new Dictionary<string, string>();
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
         using var model = IfcStore.Open(context.IfcPath);
-        var openMs = sw.ElapsedMilliseconds;
-        sw.Restart();
         var rows = MedicionExtractor.Extract(model, options, codes);
-        var extractMs = sw.ElapsedMilliseconds;
-        Console.WriteLine($"[GestorMediciones] apertura IFC: {openMs} ms, extraccion: {extractMs} ms, filas: {rows.Count}");
 
+        var overrides = ReadOverrides(context);
         var groups = rows
             .GroupBy(r => (r.Categoria, r.Familia, r.Tipo, r.Criterio, r.Codigo))
-            .Select(g => new MedicionGroup(
-                g.Key.Categoria, g.Key.Familia, g.Key.Tipo, g.Key.Criterio, g.Key.Codigo,
-                g.First().Descripcion, g.First().Capitulo,
-                g.Select(r => r.GlobalId).Distinct().ToList(),
-                g.Key.Criterio == "ud" ? g.Select(r => r.GlobalId).Distinct().Count() : g.Sum(r => r.Cantidad)))
+            .Select(g => BuildGroup(g.Key, g.ToList(), overrides))
             .OrderBy(g => g.Capitulo, StringComparer.Ordinal).ThenBy(g => g.Codigo).ThenBy(g => g.Categoria)
             .ThenBy(g => g.Familia).ThenBy(g => g.Tipo)
             .ToList();
@@ -59,6 +50,43 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
             ? new FileResult("Mediciones.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ToExcel(groups))
             : ToTable(groups);
+    }
+
+    private static MedicionGroup BuildGroup(
+        (string Categoria, string Familia, string Tipo, string Criterio, string Codigo) key,
+        List<MedicionRow> rows, Dictionary<string, string> overrides)
+    {
+        var first = rows[0];
+        var guids = rows.Select(r => r.GlobalId).Distinct().ToList();
+
+        var values = new Dictionary<string, double>();
+        foreach (var option in first.Permitidos)
+        {
+            values[Etiqueta(option)] = option switch
+            {
+                "ml" => rows.Sum(r => r.Medidas.Ml),
+                "m2" => rows.Sum(r => r.Medidas.M2),
+                "m3" => rows.Sum(r => r.Medidas.M3),
+                "m2cc" => rows.Sum(r => r.Medidas.Cc),
+                _ => guids.Count,
+            };
+        }
+
+        var id = string.Join("|", key.Categoria, key.Familia, key.Tipo, key.Criterio, key.Codigo);
+        var criterio = Etiqueta(key.Criterio);
+        if (overrides.TryGetValue(id, out var chosen) && values.ContainsKey(Etiqueta(chosen.ToLowerInvariant())))
+            criterio = Etiqueta(chosen.ToLowerInvariant());
+
+        return new MedicionGroup(id, key.Categoria, key.Familia, key.Tipo, criterio, key.Codigo,
+            first.Descripcion, first.Capitulo, guids, values);
+    }
+
+    private static Dictionary<string, string> ReadOverrides(PluginContext context)
+    {
+        if (!context.Parameters.TryGetValue("overrides", out var json) || string.IsNullOrWhiteSpace(json))
+            return new Dictionary<string, string>();
+        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new(); }
+        catch (JsonException) { return new Dictionary<string, string>(); }
     }
 
     private static TableResult ToTable(List<MedicionGroup> groups)
@@ -71,9 +99,9 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
             new("codigo", "Código"),
             new("capitulo", "Capítulo"),
             new("descripcion", "Descripción"),
-            new("criterio", "Criterio"),
+            new("criterio", "Criterio", "select"),
             new("elementos", "Nº elem.", "number"),
-            new("cantidad", "Medición", "number"),
+            new("cantidad", "Medición", "number", ValueFrom: "criterio"),
         ];
 
         var rows = groups.Select(g => new TableRow(
@@ -85,13 +113,12 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
                 ["codigo"] = g.Codigo,
                 ["capitulo"] = g.Capitulo,
                 ["descripcion"] = g.Descripcion,
-                ["criterio"] = Etiqueta(g.Criterio),
+                ["criterio"] = g.Criterio,
                 ["elementos"] = g.GlobalIds.Count,
-                ["cantidad"] = g.Criterio == "ud"
-                    ? g.Cantidad.ToString("N0", Es)
-                    : g.Cantidad.ToString("N2", Es),
             },
-            g.GlobalIds)).ToList();
+            g.GlobalIds,
+            g.Id,
+            g.Values)).ToList();
 
         return new TableResult("Gestor de Mediciones", columns, rows,
             $"{groups.Count} partidas, {groups.Select(g => g.Capitulo).Distinct().Count()} capítulos",
@@ -126,14 +153,16 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
 
             foreach (var g in chapter)
             {
+                var valor = g.Values[g.Criterio];
+                var esUd = g.Criterio == "ud";
                 ws.Cell(r, 1).Value = g.Categoria;
                 ws.Cell(r, 2).Value = string.Join(" | ", new[] { g.Familia, g.Tipo }.Where(s => s.Length > 0));
                 ws.Cell(r, 3).Value = g.Codigo;
                 ws.Cell(r, 4).Value = g.Descripcion;
-                ws.Cell(r, 5).Value = Etiqueta(g.Criterio);
+                ws.Cell(r, 5).Value = g.Criterio;
                 ws.Cell(r, 6).Value = g.GlobalIds.Count;
-                ws.Cell(r, 7).Value = g.Criterio == "ud" ? Math.Round(g.Cantidad) : Math.Round(g.Cantidad, 2);
-                ws.Cell(r, 7).Style.NumberFormat.Format = g.Criterio == "ud" ? "#,##0" : "#,##0.00";
+                ws.Cell(r, 7).Value = esUd ? Math.Round(valor) : Math.Round(valor, 2);
+                ws.Cell(r, 7).Style.NumberFormat.Format = esUd ? "#,##0" : "#,##0.00";
                 r++;
             }
             r++;
@@ -146,25 +175,23 @@ public sealed class GestorMedicionesPlugin : IIfcPlugin
         return ms.ToArray();
     }
 
-    private static readonly System.Globalization.CultureInfo Es = new("es-ES");
-
     private static string Etiqueta(string criterio) => criterio == "m2cc" ? "m2CC" : criterio;
 
     private static bool IsTrue(PluginContext ctx, string name, bool fallback) =>
         ctx.Parameters.TryGetValue(name, out var v) && bool.TryParse(v, out var b) ? b : fallback;
 }
 
-internal sealed record MedicionOptions(bool IncluirNoMedible, bool EliminarDuplicados);
+internal sealed record MedicionOptions(bool IncluirNoMedible);
 
 internal sealed record MedicionRow(
     string Categoria, string Familia, string Tipo, string Criterio, string Codigo,
     string Descripcion, string Capitulo, string GlobalId,
-    double Cantidad);
+    Medidas Medidas, string[] Permitidos);
 
 internal sealed record MedicionGroup(
-    string Categoria, string Familia, string Tipo, string Criterio, string Codigo,
+    string Id, string Categoria, string Familia, string Tipo, string Criterio, string Codigo,
     string Descripcion, string Capitulo, List<string> GlobalIds,
-    double Cantidad);
+    Dictionary<string, double> Values);
 
 internal static class CodeDictionary
 {
