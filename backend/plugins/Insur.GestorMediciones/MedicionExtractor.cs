@@ -58,7 +58,7 @@ internal static class MedicionExtractor
                 _ => data.Qty("NetArea", "Area", "GrossArea", "NetSideArea", "GrossFootprintArea"),
             } ?? 0;
             var m3 = data.Qty("NetVolume", "GrossVolume") ?? 0;
-            var cc = tipo == Tipo.Muro ? ml * (data.Qty("Height") ?? 0) : 0;
+            var cc = tipo == Tipo.Muro ? ml * (data.Qty("Height") ?? HeightFromGeometry(elem) * f) : 0;
             var perimetro = tipo is Tipo.Suelo or Tipo.Cubierta ? data.Qty("Perimeter") ?? 0 : 0;
             var medidas = new Medidas(ml, m2, m3, cc);
             var permitidos = Permitidos(tipo);
@@ -108,6 +108,30 @@ internal static class MedicionExtractor
         }
 
         return rows;
+    }
+
+    private static double HeightFromGeometry(IIfcElement elem)
+    {
+        var items = elem.Representation?.Representations.SelectMany(r => r.Items) ?? [];
+        foreach (var item in items)
+        {
+            switch (item)
+            {
+                case IIfcExtrudedAreaSolid extrusion when Math.Abs(extrusion.ExtrudedDirection.Z) > 0.99:
+                    return extrusion.Depth;
+                case IIfcFacetedBrep brep:
+                    var z = brep.Outer.CfsFaces
+                        .SelectMany(face => face.Bounds)
+                        .Select(bound => bound.Bound)
+                        .OfType<IIfcPolyLoop>()
+                        .SelectMany(loop => loop.Polygon)
+                        .Select(p => p.Z)
+                        .ToList();
+                    if (z.Count > 0) return z.Max() - z.Min();
+                    break;
+            }
+        }
+        return 0;
     }
 
     private static string CriterioInicial(string categoria, string criterio, string capitulo, string[] permitidos)
