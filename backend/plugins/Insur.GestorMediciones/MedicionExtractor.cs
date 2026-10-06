@@ -47,9 +47,13 @@ internal static class MedicionExtractor
             criterioModelo = criterioModelo.Trim().ToLowerInvariant();
 
             var ml = data.Qty("Length") ?? 0;
+            var conHuecos = index.Voided.Contains(elem.EntityLabel);
             var m2 = tipo switch
             {
                 Tipo.Muro => data.Qty("NetSideArea", "GrossSideArea", "Area", "NetArea", "GrossArea"),
+                Tipo.Suelo or Tipo.Cubierta or Tipo.Techo => conHuecos
+                    ? data.Qty("NetArea", "Area", "GrossArea", "GrossFootprintArea")
+                    : data.Qty("GrossArea", "Area", "NetArea", "GrossFootprintArea"),
                 _ => data.Qty("NetArea", "Area", "GrossArea", "NetSideArea", "GrossFootprintArea"),
             } ?? 0;
             var m3 = data.Qty("NetVolume", "GrossVolume") ?? 0;

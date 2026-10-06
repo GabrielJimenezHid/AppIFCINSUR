@@ -9,10 +9,15 @@ internal sealed class ModelIndex
     public Dictionary<int, IIfcTypeObject> Types { get; } = new();
     public Dictionary<int, List<IIfcMaterialSelect>> Materials { get; } = new();
     public Dictionary<int, TypeData> TypeCache { get; } = new();
+    public HashSet<int> Voided { get; } = new();
 
     public static ModelIndex Build(IModel model)
     {
         var index = new ModelIndex();
+
+        foreach (var rel in model.Instances.OfType<IIfcRelVoidsElement>())
+            if (rel.RelatingBuildingElement is not null)
+                index.Voided.Add(rel.RelatingBuildingElement.EntityLabel);
 
         foreach (var rel in model.Instances.OfType<IIfcRelDefinesByProperties>())
         {
