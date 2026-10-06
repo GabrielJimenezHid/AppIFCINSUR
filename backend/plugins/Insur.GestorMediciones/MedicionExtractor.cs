@@ -47,9 +47,9 @@ internal static class MedicionExtractor
             if (string.IsNullOrWhiteSpace(criterioModelo)) criterioModelo = CriterioPorDefecto(tipo);
             criterioModelo = criterioModelo.Trim().ToLowerInvariant();
 
-            var ml = data.Qty("Length") ?? 0;
+            var ml = data.GeometryValue("Longitud") ?? data.Qty("Length") ?? 0;
             var conHuecos = index.Voided.Contains(elem.EntityLabel);
-            var m2 = tipo switch
+            var m2 = data.GeometryValue("Área") ?? tipo switch
             {
                 Tipo.Muro => data.Qty("NetSideArea", "GrossSideArea", "Area", "NetArea", "GrossArea"),
                 Tipo.Suelo or Tipo.Cubierta or Tipo.Techo => conHuecos
@@ -57,7 +57,7 @@ internal static class MedicionExtractor
                     : data.Qty("GrossArea", "Area", "NetArea", "GrossFootprintArea"),
                 _ => data.Qty("NetArea", "Area", "GrossArea", "NetSideArea", "GrossFootprintArea"),
             } ?? 0;
-            var m3 = data.Qty("NetVolume", "GrossVolume") ?? 0;
+            var m3 = data.GeometryValue("Volumen") ?? data.Qty("NetVolume", "GrossVolume") ?? 0;
             var cc = tipo == Tipo.Muro ? ml * (data.Qty("Height") ?? HeightFromGeometry(elem) * f) : 0;
             var perimetro = tipo is Tipo.Suelo or Tipo.Cubierta ? data.Qty("Perimeter") ?? 0 : 0;
             var medidas = new Medidas(ml, m2, m3, cc);

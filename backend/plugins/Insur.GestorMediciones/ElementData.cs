@@ -109,15 +109,25 @@ internal sealed class ElementData
         return data;
     }
 
+    private const string GeometryPset = "INSUR_Medicion_Geometria";
+
     private static void ReadProps(IIfcPropertySetDefinition def, Dictionary<string, string> target)
     {
         if (def is not IIfcPropertySet pset) return;
+        var prefix = pset.Name == GeometryPset ? "geom:" : "";
         foreach (var prop in pset.HasProperties.OfType<IIfcPropertySingleValue>())
         {
-            var value = prop.NominalValue?.Value?.ToString();
-            if (!string.IsNullOrWhiteSpace(value)) target[prop.Name.ToString()] = value;
+            var raw = prop.NominalValue?.Value;
+            var value = raw is double d ? d.ToString("R", System.Globalization.CultureInfo.InvariantCulture) : raw?.ToString();
+            if (!string.IsNullOrWhiteSpace(value)) target[prefix + prop.Name.ToString()] = value;
         }
     }
+
+    public double? GeometryValue(string name) =>
+        double.TryParse(Prop("geom:" + name), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var v)
+            ? v
+            : null;
 
     private static void ReadQuantities(IIfcPropertySetDefinition def, double f, Dictionary<string, double> target)
     {
