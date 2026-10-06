@@ -58,8 +58,11 @@ internal static class MedicionExtractor
                 _ => data.Qty("NetArea", "Area", "GrossArea", "NetSideArea", "GrossFootprintArea"),
             } ?? 0;
             var m3 = data.GeometryValue("Volumen") ?? data.Qty("NetVolume", "GrossVolume") ?? 0;
-            var cc = tipo == Tipo.Muro ? ml * (data.Qty("Height") ?? HeightFromGeometry(elem) * f) : 0;
-            var perimetro = tipo is Tipo.Suelo or Tipo.Cubierta ? data.Qty("Perimeter") ?? 0 : 0;
+            var altura = data.GeometryValue("Altura desconectada") ?? data.Qty("Height") ?? HeightFromGeometry(elem) * f;
+            var cc = tipo == Tipo.Muro ? ml * altura : 0;
+            var perimetro = tipo is Tipo.Suelo or Tipo.Cubierta
+                ? data.GeometryValue("Perímetro") ?? data.Qty("Perimeter") ?? 0
+                : 0;
             var medidas = new Medidas(ml, m2, m3, cc);
             var permitidos = Permitidos(tipo);
 
