@@ -34,10 +34,11 @@ export function initSections({ world, fragments, getSelected }: Options) {
   const flipBtn = bar.querySelector<HTMLButtonElement>("[data-flip]")!;
   const clearBtn = bar.querySelector<HTMLButtonElement>("[data-clear]")!;
 
+  // Las claves son ejes BIM (Z = vertical). `axis` es el eje de three.js (Y = vertical).
   const cuts: Record<Axis, Cut> = {
     x: { axis: "x", color: 0xe5484d, vector: new THREE.Vector3(1, 0, 0), plane: new THREE.Plane(), active: false, side: 1, value: 0, helper: null },
-    y: { axis: "y", color: 0x30a46c, vector: new THREE.Vector3(0, 1, 0), plane: new THREE.Plane(), active: false, side: 1, value: 0, helper: null },
-    z: { axis: "z", color: 0x3e63dd, vector: new THREE.Vector3(0, 0, 1), plane: new THREE.Plane(), active: false, side: 1, value: 0, helper: null },
+    y: { axis: "z", color: 0x30a46c, vector: new THREE.Vector3(0, 0, 1), plane: new THREE.Plane(), active: false, side: 1, value: 0, helper: null },
+    z: { axis: "y", color: 0x3e63dd, vector: new THREE.Vector3(0, 1, 0), plane: new THREE.Plane(), active: false, side: 1, value: 0, helper: null },
   };
 
   const scene = world.scene.three;
@@ -47,6 +48,7 @@ export function initSections({ world, fragments, getSelected }: Options) {
   const transform = new TransformControls(world.camera.three, world.renderer!.three.domElement);
   transform.setSpace("world");
   transform.setSize(0.8);
+  transform.setColors(0xe5484d, 0x3e63dd, 0x30a46c, 0xffd60a);
   const gizmo = transform.getHelper();
   gizmo.visible = false;
   scene.add(gizmo);
@@ -124,7 +126,7 @@ export function initSections({ world, fragments, getSelected }: Options) {
 
     if (center) {
       const bounds = modelBounds();
-      cut.value = center[axis];
+      cut.value = center[cut.axis];
       cut.active = true;
       pivot.position.copy(center);
       cut.helper = buildHelper(cut, bounds.isEmpty() ? new THREE.Box3().setFromCenterAndSize(center, new THREE.Vector3(20, 20, 20)) : bounds, center);
@@ -169,7 +171,7 @@ export function initSections({ world, fragments, getSelected }: Options) {
     for (const axis of ["x", "y", "z"] as const) {
       axisButtons[axis].disabled = !hasSelection && !cuts[axis].active;
       axisButtons[axis].classList.toggle("active", cuts[axis].active);
-      axisButtons[axis].classList.toggle("current", current?.axis === axis && cuts[axis].active);
+      axisButtons[axis].classList.toggle("current", current === cuts[axis] && cuts[axis].active);
     }
     flipBtn.disabled = !current?.active;
     clearBtn.disabled = !anyActive;
